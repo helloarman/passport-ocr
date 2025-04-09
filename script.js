@@ -3,9 +3,10 @@ document.getElementById("upload").addEventListener("change", function (e) {
   
     if (file) {
       Tesseract.recognize(
-        file,
+        blob,
         'eng', // language
         {
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ<',
           logger: m => console.log(m), // optional progress logger
         }
       ).then(({ data: { text } }) => {
@@ -60,6 +61,20 @@ cropBtn.addEventListener('click', function () {
             outputElement.textContent = extractPassportData(text);
         });
     });
+
+    cropper.getCroppedCanvas({
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+      width: 800, // increase resolution
+      height: 250,
+    }).toBlob(function (blob) {
+      Tesseract.recognize(blob, 'eng', {
+        logger: m => console.log(m),
+      }).then(({ data: { text } }) => {
+        outputElement.textContent = extractPassportData(text);
+      });
+    });
+    
 });
   
   function extractPassportData(text) {
@@ -81,12 +96,12 @@ cropBtn.addEventListener('click', function () {
       let fullName = "";
   
       if (mrzParts.length >= 2) {
-        surname = mrzParts[0].replace('P<BGD', '').replace(/</g, ' ').trim();
-        givenNames = mrzParts[1].replace(/</g, ' ').trim();
-        fullName = `${surname} ${givenNames}`.trim();
+        surname = cleanMRZName(mrzParts[0].replace('P<BGD', ''));
+        givenNames = cleanMRZName(mrzParts[1] || '');
+        fullName = `${givenNames} ${surname}`.trim();
       } else {
-        surname = mrzParts[0].replace('P<BGD', '').replace(/</g, ' ').trim();
-        fullName = surname; // fallback if givenNames missing
+        surname = cleanMRZName(mrzParts[0].replace('P<BGD', ''));
+        fullName = surname;
       }
   
       data.surname = surname;
@@ -111,9 +126,9 @@ cropBtn.addEventListener('click', function () {
     }
   
     const doeRaw = mrzDataLine2.slice(21, 27);
-    if (doeRaw) {
+    if (doeRaw.length === 6) {
       const [yy, mm, dd] = [doeRaw.slice(0, 2), doeRaw.slice(2, 4), doeRaw.slice(4, 6)];
-      const expiryYear = parseInt(yy) > 30 ? `19${yy}` : `20${yy}`;
+      const expiryYear = convertYear(yy, true); // mark as expiry
       data.dateOfExpiry = `${expiryYear}-${mm}-${dd}`;
     }
   
@@ -121,7 +136,22 @@ cropBtn.addEventListener('click', function () {
   
     return JSON.stringify(data, null, 2);
   }
+
+  function convertYear(twoDigitYear, isExpiry = false) {
+    const currentYear = new Date().getFullYear();
+    const cutoff = currentYear % 100; // e.g. 2025 → 25
+    const century = isExpiry || parseInt(twoDigitYear) > cutoff ? 2000 : 1900;
+    return century + parseInt(twoDigitYear);
+  }
   
+  function cleanMRZName(name) {
+    return name
+      .replace(/([KLC]){2,}/g, ' ')                     // Replace 2+ consecutive K/L/C with space
+      .replace(/\bK\b/g, '')                           // Remove standalone "K"
+      .replace(/[<|,0-9~`!@#$%^&*()_+={}\[\]:;"'<>.?\\/|-]/g, ' ') // Remove special chars and digits
+      .replace(/\s+/g, ' ')                             // Collapse multiple spaces
+      .trim();
+  }
   
   
   
