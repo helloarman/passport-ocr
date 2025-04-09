@@ -14,6 +14,53 @@ document.getElementById("upload").addEventListener("change", function (e) {
       });
     }
   });
+
+  let cropper;
+const uploadInput = document.getElementById('upload');
+const outputElement = document.getElementById('output');
+const imageElement = document.getElementById('image');
+const cropBtn = document.getElementById('crop-btn');
+
+uploadInput.addEventListener("change", function (e) {
+    const file = e.target.files[0];
+
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            imageElement.src = event.target.result;
+            // Initialize Cropper.js
+            if (cropper) {
+                cropper.destroy();
+            }
+            cropper = new Cropper(imageElement, {
+                aspectRatio: 16 / 10, // Customize aspect ratio as needed
+                viewMode: 1,
+                autoCropArea: 0.5,
+            });
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+cropBtn.addEventListener('click', function () {
+    if (!cropper) return;
+    
+    const croppedCanvas = cropper.getCroppedCanvas();
+    
+    // Convert cropped canvas to a Blob for Tesseract.js
+    croppedCanvas.toBlob(function (blob) {
+        Tesseract.recognize(
+            blob,
+            'eng',
+            {
+                logger: m => console.log(m),
+            }
+        ).then(({ data: { text } }) => {
+            console.log("OCR Result:\n", text);
+            outputElement.textContent = extractPassportData(text);
+        });
+    });
+});
   
   function extractPassportData(text) {
     const data = {};

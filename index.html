@@ -5,14 +5,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.12/dist/cropper.min.css" rel="stylesheet">
 </head>
 
 <body>
     <label for="upload">Upload an Image</label>
     <input type="file" id="upload">
+    
+    <div id="image-container" style="width:500px; max-height: 500px;">
+        <img id="image" src="" alt="Uploaded Image">
+    </div>
+
+    <button id="crop-btn">Crop Image</button>
     <pre id="output"></pre>
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.12/dist/cropper.min.js"></script>
     <script src="./script.js"></script>
 </body>
 
