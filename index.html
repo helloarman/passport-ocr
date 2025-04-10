@@ -12,13 +12,18 @@
 <body>
     <label for="upload">Upload an Image</label>
     <input type="file" id="upload">
-    
+
     <div id="image-container" style="width:500px; max-height: 500px;">
         <img id="image" src="" alt="Uploaded Image">
     </div>
 
     <button id="crop-btn">Crop Image</button>
-    
+
+    <div id="progress-container" style="margin: 10px 0;">
+        <progress id="ocr-progress" value="0" max="1" style="width: 300px;"></progress>
+        <span id="progress-text">0%</span>
+    </div>
+
     <pre id="output"></pre>
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
