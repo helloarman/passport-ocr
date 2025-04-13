@@ -2,33 +2,24 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passport OCR</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.12/dist/cropper.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Passport OCR</title>
 </head>
 
 <body>
-    <label for="upload">Upload an Image</label>
-    <input type="file" id="upload">
+  <label for="upload">Upload an Image</label>
+  <input type="file" id="upload">
 
-    <div id="image-container" style="width:500px; max-height: 500px;">
-        <img id="image" src="./placeholder.jpg" alt="Uploaded Image">
-    </div>
+  <div id="progress-container" style="margin: 10px 0;">
+    <progress id="ocr-progress" value="0" max="1" style="width: 300px;"></progress>
+    <span id="progress-text">0%</span>
+  </div>
 
-    <button id="crop-btn">Crop Image</button>
+  <pre id="output"></pre>
 
-    <div id="progress-container" style="margin: 10px 0;">
-        <progress id="ocr-progress" value="0" max="1" style="width: 300px;"></progress>
-        <span id="progress-text">0%</span>
-    </div>
-
-    <pre id="output"></pre>
-
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.12/dist/cropper.min.js"></script>
-    <script src="./script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+  <script src="./script.js"></script>
 </body>
 
 </html>

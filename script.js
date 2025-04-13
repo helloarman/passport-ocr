@@ -2,102 +2,47 @@ document.getElementById("upload").addEventListener("change", function (e) {
   const file = e.target.files[0];
 
   if (file) {
-    Tesseract.recognize(
-      blob,
-      'eng', // language
-      {
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
-        logger: m => console.log(m),
-      }
-    ).then(({ data: { text } }) => {
-      console.log("OCR Result:\n", text);
-      document.getElementById("output").textContent = extractPassportData(text);
-    });
-  }
-});
-
-let cropper;
-const uploadInput = document.getElementById('upload');
-const outputElement = document.getElementById('output');
-const imageElement = document.getElementById('image');
-const cropBtn = document.getElementById('crop-btn');
-
-uploadInput.addEventListener("change", function (e) {
-  const file = e.target.files[0];
-
-  if (file) {
     const reader = new FileReader();
     reader.onload = function (event) {
-      imageElement.src = event.target.result;
-      // Initialize Cropper.js
-      if (cropper) {
-        cropper.destroy();
-      }
-      cropper = new Cropper(imageElement, {
-        aspectRatio: 16 / 10.5, // Customize aspect ratio as needed
-        viewMode: 1,
-        autoCropArea: 0.5,
-      });
+      const img = new Image();
+      img.src = event.target.result;
+
+      img.onload = function () {
+        Tesseract.recognize(
+          img,
+          'eng',
+          {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                const progress = m.progress;
+                document.getElementById('ocr-progress').value = progress;
+                document.getElementById('progress-text').textContent = `${Math.round(progress * 100)}%`;
+              }
+            }
+          }
+        ).then(({ data: { text } }) => {
+          console.log("OCR Result:\n", text);
+          document.getElementById("output").textContent = extractPassportData(text);
+        });
+      };
     };
     reader.readAsDataURL(file);
   }
 });
 
-cropBtn.addEventListener('click', function () {
-  if (!cropper) return;
-
-  const croppedCanvas = cropper.getCroppedCanvas();
-
-  // Convert cropped canvas to a Blob for Tesseract.js
-  croppedCanvas.toBlob(function (blob) {
-    Tesseract.recognize(
-      blob,
-      'eng',
-      {
-        logger: m => {
-          console.log(m);
-          if (m.status === 'recognizing text') {
-            const progress = m.progress;
-            document.getElementById('ocr-progress').value = progress;
-            document.getElementById('progress-text').textContent = `${Math.round(progress * 100)}%`;
-          }
-        }
-      }
-    ).then(({ data: { text } }) => {
-      console.log("OCR Result:\n", text);
-      outputElement.textContent = extractPassportData(text);
-    });
-  });
-
-  cropper.getCroppedCanvas({
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high',
-    width: 800, // increase resolution
-    height: 250,
-  }).toBlob(function (blob) {
-    Tesseract.recognize(blob, 'eng', {
-      logger: m => console.log(m),
-    }).then(({ data: { text } }) => {
-      outputElement.textContent = extractPassportData(text);
-    });
-  });
-
-});
-
 function extractPassportData(text) {
   const data = {};
-
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
 
+  // Fix common OCR misreads
+  text = text.replace(/([KL])+/g, '<');
+
   const mrzLine = lines.find(line => line.startsWith('P<BGD'));
-  const mrzDataLine2 = lines[lines.indexOf(mrzLine) + 1];
+  const mrzDataLine2 = mrzLine ? lines[lines.indexOf(mrzLine) + 1] : '';
 
-  // Handle OCR misinterpretation of characters
-  text = text.replace(/([KL])+/g, '<'); // Replace 'K' or 'L' with '<' when applicable
-
+  // === MRZ Extraction ===
   if (mrzLine) {
     const mrzParts = mrzLine.split('<<');
-    console.log(mrzParts);
     let surname = "";
     let givenNames = "";
     let fullName = "";
@@ -118,31 +63,55 @@ function extractPassportData(text) {
 
   if (mrzDataLine2) {
     data.passportNumber = mrzDataLine2.slice(0, 9);
+    const dobRaw = mrzDataLine2.slice(13, 19);
+    if (dobRaw.length === 6) {
+      const [yy, mm, dd] = [dobRaw.slice(0, 2), dobRaw.slice(2, 4), dobRaw.slice(4, 6)];
+      const dobYear = parseInt(yy) > 30 ? `19${yy}` : `20${yy}`;
+      data.dateOfBirth = `${dobYear}-${mm}-${dd}`;
+    }
+    
+    const sex = mrzDataLine2[20];
+    if (sex === 'F' || sex === 'M') {
+      data.sex = sex;
+    }
+    
+    const doeRaw = mrzDataLine2.slice(21, 27);
+    if (doeRaw.length === 6) {
+      const [yy, mm, dd] = [doeRaw.slice(0, 2), doeRaw.slice(2, 4), doeRaw.slice(4, 6)];
+      const expiryYear = convertYear(yy, true);
+      data.dateOfExpiry = `${expiryYear}-${mm}-${dd}`;
+    }
+    
+    if (doeRaw.length === 6) {
+      const [yy, mm, dd] = [doeRaw.slice(0, 2), doeRaw.slice(2, 4), doeRaw.slice(4, 6)];
+      const issueYear = convertYear(yy, true);
+
+      if (issueYear > new Date().getFullYear()) {
+        issueYear -= 10;
+      }
+      data.dateOfIssue = `${issueYear}-${mm}-${dd}`;
+    }
   }
 
-  const dobRaw = mrzDataLine2.slice(13, 19);
-  if (dobRaw) {
-    const [yy, mm, dd] = [dobRaw.slice(0, 2), dobRaw.slice(2, 4), dobRaw.slice(4, 6)];
-    const dobYear = parseInt(yy) > 30 ? `19${yy}` : `20${yy}`;
-    data.dateOfBirth = `${dobYear}-${mm}-${dd}`;
+  // === Try to Extract Additional Fields from Full Text ===
+
+  const fullText = text.toUpperCase();
+
+  // Father’s Name
+  const fatherMatch = fullText.match(/FATHER(?:'S)?(?: NAME)?:?\s*([A-Z\s]+)/);
+  if (fatherMatch) {
+    data.fathersName = fatherMatch[1].trim();
   }
 
-  const sex = mrzDataLine2[20];
-  if (sex === 'F' || sex === 'M') {
-    data.sex = sex;
+  // Mother’s Name
+  const motherMatch = fullText.match(/MOTHER(?:'S)?(?: NAME)?:?\s*([A-Z\s]+)/);
+  if (motherMatch) {
+    data.mothersName = motherMatch[1].trim();
   }
 
-  const doeRaw = mrzDataLine2.slice(21, 27);
-  if (doeRaw.length === 6) {
-    const [yy, mm, dd] = [doeRaw.slice(0, 2), doeRaw.slice(2, 4), doeRaw.slice(4, 6)];
-    const expiryYear = convertYear(yy, true); // mark as expiry
-    data.dateOfExpiry = `${expiryYear}-${mm}-${dd}`;
-  }
-
-  if (text.includes("BGD")) {
+  // Nationality
+  if (fullText.includes("BGD")) {
     data.nationality = "BANGLADESHI";
-  } else {
-    data.nationality = "";
   }
 
   return JSON.stringify(data, null, 2);
@@ -150,7 +119,7 @@ function extractPassportData(text) {
 
 function convertYear(twoDigitYear, isExpiry = false) {
   const currentYear = new Date().getFullYear();
-  const cutoff = currentYear % 100; // e.g. 2025 → 25
+  const cutoff = currentYear % 100;
   const century = isExpiry || parseInt(twoDigitYear) > cutoff ? 2000 : 1900;
   return century + parseInt(twoDigitYear);
 }
@@ -159,9 +128,7 @@ function cleanMRZName(name) {
   return name
     .replace(/([KLC]){2,}/g, ' ')
     .replace(/\bK\b/g, '')
-    .replace(/[<|,0-9~`!@#$€%^&*()_+={}\[\]:;"'<>.?\\/|-]/g, ' ')
+    .replace(/[<|,0-9~!@#$€%^&*()_+={}\[\]:;"'<>.?\\/|-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
-
-
